@@ -3,6 +3,9 @@
 import json
 import re
 import shutil
+import os
+from compat_generator import map_header_files
+from header_matcher import match_headers
 from pathlib import Path
 
 
@@ -197,7 +200,7 @@ def generate_virtuals(target):
         f.write(txt)
 
 
-def get_file_list(api_filepath, output_dir, headers=False, sources=False, profile_filepath=""):
+def get_file_list(api_filepath, output_dir, headers=False, sources=False, compat=False, profile_filepath=""):
     api = {}
     files = []
     with open(api_filepath, encoding="utf-8") as api_file:
@@ -207,6 +210,7 @@ def get_file_list(api_filepath, output_dir, headers=False, sources=False, profil
 
     core_gen_folder = Path(output_dir) / "gen" / "include" / "godot_cpp" / "core"
     include_gen_folder = Path(output_dir) / "gen" / "include" / "godot_cpp"
+    include_gen_compat_folder = Path(output_dir) / "gen" / "include" / "godot_compat"
     source_gen_folder = Path(output_dir) / "gen" / "src"
 
     files.append(str((core_gen_folder / "ext_wrappers.gen.inc").as_posix()))
@@ -220,9 +224,12 @@ def get_file_list(api_filepath, output_dir, headers=False, sources=False, profil
             continue
 
         header_filename = include_gen_folder / "variant" / (camel_to_snake(builtin_class["name"]) + ".hpp")
+        header_compat_filename = include_gen_compat_folder / "variant" / (camel_to_snake(builtin_class["name"]) + ".hpp")
         source_filename = source_gen_folder / "variant" / (camel_to_snake(builtin_class["name"]) + ".cpp")
         if headers:
             files.append(str(header_filename.as_posix()))
+        if compat:
+            files.append(str(header_compat_filename.as_posix()))
         if sources:
             files.append(str(source_filename.as_posix()))
 
@@ -232,9 +239,12 @@ def get_file_list(api_filepath, output_dir, headers=False, sources=False, profil
             engine_class["name"] = "ClassDBSingleton"
             engine_class["alias_for"] = "ClassDB"
         header_filename = include_gen_folder / "classes" / (camel_to_snake(engine_class["name"]) + ".hpp")
+        header_compat_filename = include_gen_compat_folder / "classes" / (camel_to_snake(engine_class["name"]) + ".hpp")
         source_filename = source_gen_folder / "classes" / (camel_to_snake(engine_class["name"]) + ".cpp")
         if headers:
             files.append(str(header_filename.as_posix()))
+        if compat:
+            files.append(str(header_compat_filename.as_posix()))
         if sources and is_class_included(engine_class["name"], build_profile):
             files.append(str(source_filename.as_posix()))
 
@@ -245,21 +255,30 @@ def get_file_list(api_filepath, output_dir, headers=False, sources=False, profil
         snake_struct_name = camel_to_snake(struct_name)
 
         header_filename = include_gen_folder / "classes" / (snake_struct_name + ".hpp")
+        header_compat_filename = include_gen_compat_folder / "classes" / (snake_struct_name + ".hpp")
         if headers:
             files.append(str(header_filename.as_posix()))
+        if compat:
+            files.append(str(header_compat_filename.as_posix()))
 
     if headers:
-        for path in [
-            include_gen_folder / "variant" / "builtin_types.hpp",
-            include_gen_folder / "variant" / "builtin_binds.hpp",
-            include_gen_folder / "variant" / "utility_functions.hpp",
-            include_gen_folder / "variant" / "variant_size.hpp",
-            include_gen_folder / "variant" / "builtin_vararg_methods.hpp",
-            include_gen_folder / "classes" / "global_constants.hpp",
-            include_gen_folder / "classes" / "global_constants_binds.hpp",
-            include_gen_folder / "core" / "version.hpp",
-        ]:
-            files.append(str(path.as_posix()))
+        relative_paths = [
+            ["variant", "builtin_types.hpp"],
+            ["variant", "builtin_binds.hpp"],
+            ["variant", "utility_functions.hpp"],
+            ["variant", "variant_size.hpp"],
+            ["variant", "builtin_vararg_methods.hpp"],
+            ["classes", "global_constants.hpp"],
+            ["classes", "global_constants_binds.hpp"],
+            ["core", "version.hpp"]
+        ]
+
+        for relative_path_parts in relative_paths:
+            full_header_path = include_gen_folder.joinpath(*relative_path_parts)
+            files.append(str(full_header_path.as_posix()))
+            if compat:
+                full_compat_path = include_gen_compat_folder.joinpath(*relative_path_parts)
+                files.append(str(full_compat_path.as_posix()))
     if sources:
         utility_functions_source_path = source_gen_folder / "variant" / "utility_functions.cpp"
         files.append(str(utility_functions_source_path.as_posix()))
@@ -267,8 +286,8 @@ def get_file_list(api_filepath, output_dir, headers=False, sources=False, profil
     return files
 
 
-def print_file_list(api_filepath, output_dir, headers=False, sources=False, profile_filepath=""):
-    print(*get_file_list(api_filepath, output_dir, headers, sources, profile_filepath), sep=";", end=None)
+def print_file_list(api_filepath, output_dir, headers=False, sources=False, compat=False, profile_filepath=""):
+    print(*get_file_list(api_filepath, output_dir, headers, sources, compat, profile_filepath), sep=";", end=None)
 
 
 def parse_build_profile(profile_filepath, api):
@@ -365,7 +384,7 @@ def scons_emit_files(target, source, env):
     if profile_filepath and not Path(profile_filepath).is_absolute():
         profile_filepath = str((Path(env.Dir("#").abspath) / profile_filepath).as_posix())
 
-    files = [env.File(f) for f in get_file_list(str(source[0]), target[0].abspath, True, True, profile_filepath)]
+    files = [env.File(f) for f in get_file_list(str(source[0]), target[0].abspath, True, True, env["godot_repo"] != "", profile_filepath)]
     env.Clean(target, files)
     env["godot_cpp_gen_dir"] = target[0].abspath
     return files, source
@@ -378,11 +397,12 @@ def scons_generate_bindings(target, source, env):
         "32" if "32" in env["arch"] else "64",
         env["precision"],
         env["godot_cpp_gen_dir"],
+        env["godot_repo"],
     )
     return None
 
 
-def generate_bindings(api_filepath, use_template_get_node, bits="64", precision="single", output_dir="."):
+def generate_bindings(api_filepath, use_template_get_node, bits="64", precision="single", output_dir=".", godot_repo = ""):
     api = None
 
     target_dir = Path(output_dir) / "gen"
@@ -402,6 +422,8 @@ def generate_bindings(api_filepath, use_template_get_node, bits="64", precision=
     generate_builtin_bindings(api, target_dir, real_t + "_" + bits)
     generate_engine_classes_bindings(api, target_dir, use_template_get_node)
     generate_utility_functions(api, target_dir)
+    if godot_repo != "":
+        generate_compat_includes(godot_repo, output_dir)
 
 
 CLASS_ALIASES = {
@@ -1542,6 +1564,37 @@ def generate_engine_classes_bindings(api, output_dir, use_template_get_node):
         result.append(f"#endif // ! {header_guard}")
 
         with header_filename.open("w+", encoding="utf-8") as header_file:
+            header_file.write("\n".join(result))
+
+
+def generate_compat_includes(godot_repo: Path, output_dir: Path):
+    file_types_mapping_godot_cpp_gen = map_header_files(output_dir)
+    file_types_mapping_godot = map_header_files(godot_repo)
+    # Match the headers
+    file_types_mapping = match_headers(file_types_mapping_godot_cpp_gen, file_types_mapping_godot)
+
+    for file_godot_cpp_name, file_godot_names in file_types_mapping.items():
+        header_filepath = file_godot_cpp_name.replace("godot_cpp", "godot_compat")
+        if "gen/include" not in header_filepath:
+            header_filepath = header_filepath.replace("include/", "gen/include/")
+        Path(os.path.dirname(Path(output_dir) / Path(header_filepath))).mkdir(parents=True, exist_ok=True)
+        result = []
+        snake_header_name = camel_to_snake(header_filepath)
+        add_header(f"{snake_header_name}.hpp", result)
+
+        header_guard = f"GODOT_COMPAT_{os.path.splitext(os.path.basename(header_filepath).upper())[0]}_HPP"
+        result.append(f"#ifndef {header_guard}")
+        result.append(f"#define {header_guard}")
+        result.append("")
+        result.append(f"#ifdef GODOT_MODULE_COMPAT")
+        for file_godot_name in file_godot_names:
+            result.append(f"#include <{file_godot_name}>")
+        result.append(f"#else")
+        result.append(f"#include <{file_godot_cpp_name}>")
+        result.append(f"#endif")
+        result.append("")
+        result.append(f"#endif // ! {header_guard}")
+        with (Path(output_dir) / Path(header_filepath)).open("w+", encoding="utf-8") as header_file:
             header_file.write("\n".join(result))
 
 

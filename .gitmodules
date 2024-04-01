@@ -1,4 +1,4 @@
 [submodule "godot-cpp"]
 	path = godot-cpp
-	url = https://github.com/godotengine/godot-cpp.git
-	branch = master
+	url = https://github.com/v-sekai/godot-cpp.git
+	branch = compat-layer

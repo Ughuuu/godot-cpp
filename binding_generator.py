@@ -1588,9 +1588,10 @@ def generate_compat_includes(godot_repo: Path, output_dir: Path):
         result.append("")
         result.append(f"#ifdef GODOT_MODULE_COMPAT")
         for file_godot_name in file_godot_names:
-            result.append(f"#include <{file_godot_name}>")
+            result.append(f"#include <{Path(file_godot_name).as_posix()}>")
+        
         result.append(f"#else")
-        result.append(f"#include <{file_godot_cpp_name}>")
+        result.append(f"#include <{Path(file_godot_cpp_name).as_posix()}>")
         result.append(f"#endif")
         result.append("")
         result.append(f"#endif // ! {header_guard}")

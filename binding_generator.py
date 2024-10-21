@@ -1592,6 +1592,7 @@ def generate_compat_includes(godot_repo: Path, output_dir: Path):
         
         result.append(f"#else")
         file_godot_cpp_name = file_godot_cpp_name.replace("gen/include/", "")
+        file_godot_cpp_name = file_godot_cpp_name.replace("include/", "")
         result.append(f"#include <{Path(file_godot_cpp_name).as_posix()}>")
         result.append(f"using namespace godot;")
         result.append(f"#endif")

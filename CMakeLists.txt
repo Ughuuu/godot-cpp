@@ -136,14 +136,14 @@ else()
 	set(GENERATE_BINDING_PARAMETERS "False")
 endif()
 
-execute_process(COMMAND "${Python3_EXECUTABLE}" "-c" "import binding_generator; binding_generator.print_file_list(\"${GODOT_GDEXTENSION_API_FILE}\", \"${CMAKE_CURRENT_BINARY_DIR}\", headers=True, sources=True)"
+execute_process(COMMAND "${Python3_EXECUTABLE}" "-c" "import binding_generator; binding_generator.print_file_list(\"${GODOT_GDEXTENSION_API_FILE}\", \"${CMAKE_CURRENT_BINARY_DIR}\", headers=True, sources=True, compat=\"${GODOT_REPO}\" != \"\")"
 	WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 	OUTPUT_VARIABLE GENERATED_FILES_LIST
 	OUTPUT_STRIP_TRAILING_WHITESPACE
 )
 
 add_custom_command(OUTPUT ${GENERATED_FILES_LIST}
-		COMMAND "${Python3_EXECUTABLE}" "-c" "import binding_generator; binding_generator.generate_bindings(\"${GODOT_GDEXTENSION_API_FILE}\", \"${GENERATE_BINDING_PARAMETERS}\", \"${BITS}\", \"${FLOAT_PRECISION}\", \"${CMAKE_CURRENT_BINARY_DIR}\")"
+		COMMAND "${Python3_EXECUTABLE}" "-c" "import binding_generator; binding_generator.generate_bindings(\"${GODOT_GDEXTENSION_API_FILE}\", \"${GENERATE_BINDING_PARAMETERS}\", \"${BITS}\", \"${FLOAT_PRECISION}\", \"${CMAKE_CURRENT_BINARY_DIR}\", \"${GODOT_REPO}\")"
 		VERBATIM
 		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 		MAIN_DEPENDENCY ${GODOT_GDEXTENSION_API_FILE}

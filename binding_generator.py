@@ -1574,6 +1574,7 @@ def generate_compat_includes(godot_repo: Path, output_dir: Path):
     file_types_mapping = match_headers(file_types_mapping_godot_cpp_gen, file_types_mapping_godot)
 
     for file_godot_cpp_name, file_godot_names in file_types_mapping.items():
+        file_godot_cpp_name = Path(file_godot_cpp_name).as_posix()
         header_filepath = file_godot_cpp_name.replace("godot_cpp", "godot_compat")
         if "gen/include" not in header_filepath:
             header_filepath = header_filepath.replace("include/", "gen/include/")
@@ -1593,7 +1594,7 @@ def generate_compat_includes(godot_repo: Path, output_dir: Path):
         result.append(f"#else")
         file_godot_cpp_name = file_godot_cpp_name.replace("gen/include/", "")
         file_godot_cpp_name = file_godot_cpp_name.replace("include/", "")
-        result.append(f"#include <{Path(file_godot_cpp_name).as_posix()}>")
+        result.append(f"#include <{file_godot_cpp_name}>")
         result.append(f"using namespace godot;")
         result.append(f"#endif")
         result.append("")
